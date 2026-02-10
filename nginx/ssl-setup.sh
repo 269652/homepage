@@ -2,7 +2,7 @@
 
 # Wait for nginx to be ready
 echo "Waiting for nginx to be ready..."
-sleep 5
+sleep 15
 
 # Verify ACME challenge path is working
 mkdir -p /var/www/certbot/.well-known/acme-challenge
@@ -10,7 +10,17 @@ echo "test" > /var/www/certbot/.well-known/acme-challenge/test-file
 if wget -q -O - http://localhost/.well-known/acme-challenge/test-file 2>/dev/null | grep -q "test"; then
     echo "ACME challenge path is working correctly"
 else
-    echo "WARNING: ACME challenge path is NOT working"
+    echo "WARNING: ACME challenge path is NOT working - dumping debug info"
+    echo "--- nginx config test ---"
+    nginx -t 2>&1
+    echo "--- sites-enabled contents ---"
+    ls -la /etc/nginx/sites-enabled/
+    echo "--- active server blocks ---"
+    grep -r "server_name\|listen\|location.*well-known" /etc/nginx/sites-enabled/ 2>/dev/null
+    echo "--- trying wget with output ---"
+    wget -O - http://localhost/.well-known/acme-challenge/test-file 2>&1
+    echo "--- checking /var/www/certbot ---"
+    ls -laR /var/www/certbot/
 fi
 rm -f /var/www/certbot/.well-known/acme-challenge/test-file
 
@@ -22,7 +32,6 @@ mkdir -p /etc/letsencrypt/live/strapi.javascript.moe
 check_cert() {
     domain=$1
     if [ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]; then
-        # Check if certificate is still valid (more than 30 days left)
         if openssl x509 -checkend 2592000 -noout -in "/etc/letsencrypt/live/$domain/fullchain.pem" >/dev/null 2>&1; then
             echo "Certificate for $domain is still valid"
             return 0
@@ -59,24 +68,37 @@ done
 if [ "$needs_cert" = true ]; then
     echo "Obtaining certificates for all domains in a single request..."
 
-    certbot certonly \
-        --webroot \
-        --webroot-path=/var/www/certbot \
-        --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
-        --agree-tos \
-        --no-eff-email \
-        --force-renewal \
-        -d javascript.moe \
-        -d strapi.javascript.moe
+    # Try up to 3 times with increasing delay
+    for attempt in 1 2 3; do
+        echo "Certbot attempt $attempt..."
 
-    if [ $? -eq 0 ]; then
-        echo "Certificates obtained successfully"
-    else
-        echo "Certbot failed, creating self-signed certificates as fallback..."
-        for domain in javascript.moe strapi.javascript.moe; do
-            create_self_signed "$domain"
-        done
-    fi
+        certbot certonly \
+            --webroot \
+            --webroot-path=/var/www/certbot \
+            --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
+            --agree-tos \
+            --no-eff-email \
+            --force-renewal \
+            -v \
+            -d javascript.moe \
+            -d strapi.javascript.moe
+
+        if [ $? -eq 0 ]; then
+            echo "Certificates obtained successfully"
+            break
+        else
+            echo "Certbot attempt $attempt failed"
+            if [ "$attempt" -lt 3 ]; then
+                echo "Waiting 30 seconds before retry..."
+                sleep 30
+            else
+                echo "All attempts failed, creating self-signed certificates as fallback..."
+                for domain in javascript.moe strapi.javascript.moe; do
+                    create_self_signed "$domain"
+                done
+            fi
+        fi
+    done
 fi
 
 # Reload nginx to use new certificates

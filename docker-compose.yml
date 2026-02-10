@@ -34,7 +34,9 @@ services:
       - "3000"
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      STRAPI_URL: ${STRAPI_URL:-https://strapi.javascript.moe}
+      STRAPI_URL: ${STRAPI_URL:-https://strapi.javascript.moe}/api
+      STRAPI_BASE: ${STRAPI_BASE:-https://strapi.javascript.moe}
+      STRAPI_TOKEN: ${STRAPI_TOKEN:-69e6920c82489cb78c832583792c1e4f5e972c00bf3152e60d04a8f28d0384d5131387940f387158c41ace86b23964d64dc4ecbbdd25d8193fddac71907d81bfbddb77d507e90bce943208a038477fd76a533635c7bfa1b28a9b6966c7835730f46a6e16af2f1da5d3a1fdb261f9ba58c94e45f6edb021fdea102514e722336d}
       FRONTEND_DOMAIN: ${FRONTEND_DOMAIN:-javascript.moe}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://javascript.moe}
     volumes:

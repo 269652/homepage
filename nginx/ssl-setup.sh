@@ -1,9 +1,9 @@
 #!/bin/sh
 
-# Wait for nginx to be ready by actually testing it
+# Wait for nginx to be ready by checking if port 80 is open
 echo "Waiting for nginx to be ready..."
 for i in $(seq 1 30); do
-    if wget -q --spider http://localhost:80/ 2>/dev/null || wget -q -O /dev/null http://localhost:80/ 2>/dev/null; then
+    if wget -S -O /dev/null http://localhost:80/ 2>&1 | grep -q "HTTP/"; then
         echo "Nginx is responding on port 80"
         break
     fi

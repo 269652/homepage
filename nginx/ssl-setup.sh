@@ -32,41 +32,29 @@ create_self_signed() {
         -subj "/C=US/ST=State/L=City/O=Organization/OU=OrgUnit/CN=$domain"
 }
 
-# Check if any domain needs a certificate
-needs_cert=false
+# Obtain certificate for each domain separately
 for domain in javascript.moe strapi.javascript.moe; do
     if ! check_cert "$domain"; then
-        needs_cert=true
-        break
+        echo "=== Obtaining certificate for $domain using standalone mode ==="
+
+        certbot certonly \
+            --standalone \
+            --preferred-challenges http \
+            --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
+            --agree-tos \
+            --no-eff-email \
+            -d $domain
+
+        if [ $? -eq 0 ]; then
+            echo "Certificate obtained successfully for $domain"
+        else
+            echo "Certbot failed for $domain, creating self-signed fallback..."
+            create_self_signed "$domain"
+        fi
     fi
 done
 
-if [ "$needs_cert" = true ]; then
-    echo "=== Obtaining certificates using standalone mode ==="
-    echo "Certbot will start its own server on port 80..."
-
-    certbot certonly \
-        --standalone \
-        --preferred-challenges http \
-        --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
-        --agree-tos \
-        --no-eff-email \
-        --force-renewal \
-        -v \
-        -d javascript.moe \
-        -d strapi.javascript.moe
-
-    if [ $? -eq 0 ]; then
-        echo "Certificates obtained successfully!"
-    else
-        echo "Certbot failed, creating self-signed certificates as fallback..."
-        for domain in javascript.moe strapi.javascript.moe; do
-            create_self_signed "$domain"
-        done
-    fi
-fi
-
-# Now set up the SSL nginx configs
+# Set up SSL nginx configs
 echo "Setting up SSL nginx configurations..."
 rm -f /etc/nginx/sites-enabled/*.conf
 ln -sf /etc/nginx/sites-available/javascript.moe.conf /etc/nginx/sites-enabled/

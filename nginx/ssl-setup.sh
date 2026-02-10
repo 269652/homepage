@@ -1,8 +1,25 @@
 #!/bin/sh
 
-# Wait for nginx to be ready
+# Wait for nginx to be ready by actually testing it
 echo "Waiting for nginx to be ready..."
-sleep 10
+for i in $(seq 1 30); do
+    if wget -q --spider http://localhost:80/ 2>/dev/null || wget -q -O /dev/null http://localhost:80/ 2>/dev/null; then
+        echo "Nginx is responding on port 80"
+        break
+    fi
+    echo "Attempt $i: Nginx not ready yet, waiting..."
+    sleep 2
+done
+
+# Verify ACME challenge path is working
+mkdir -p /var/www/certbot/.well-known/acme-challenge
+echo "test" > /var/www/certbot/.well-known/acme-challenge/test-file
+if wget -q -O - http://localhost/.well-known/acme-challenge/test-file 2>/dev/null | grep -q "test"; then
+    echo "ACME challenge path is working correctly"
+else
+    echo "WARNING: ACME challenge path is NOT working"
+fi
+rm -f /var/www/certbot/.well-known/acme-challenge/test-file
 
 # Create directories for Let's Encrypt
 mkdir -p /etc/letsencrypt/live/javascript.moe
@@ -26,29 +43,6 @@ check_cert() {
     fi
 }
 
-# Function to obtain certificate
-obtain_cert() {
-    domain=$1
-    echo "Obtaining certificate for $domain..."
-
-    certbot certonly \
-        --webroot \
-        --webroot-path=/var/www/certbot \
-        --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
-        --agree-tos \
-        --no-eff-email \
-        --force-renewal \
-        -d $domain
-
-    if [ $? -eq 0 ]; then
-        echo "Certificate obtained successfully for $domain"
-        return 0
-    else
-        echo "Failed to obtain certificate for $domain"
-        return 1
-    fi
-}
-
 # Function to create self-signed certificate as fallback
 create_self_signed() {
     domain=$1
@@ -60,16 +54,37 @@ create_self_signed() {
         -subj "/C=US/ST=State/L=City/O=Organization/OU=OrgUnit/CN=$domain"
 }
 
-# Check and obtain certificates for each domain
+# Check if any domain needs a certificate
+needs_cert=false
 for domain in javascript.moe strapi.javascript.moe; do
     if ! check_cert "$domain"; then
-        # Try to obtain real certificate first
-        if ! obtain_cert "$domain"; then
-            echo "Failed to obtain real certificate for $domain, creating self-signed..."
-            create_self_signed "$domain"
-        fi
+        needs_cert=true
+        break
     fi
 done
+
+if [ "$needs_cert" = true ]; then
+    echo "Obtaining certificates for all domains in a single request..."
+
+    certbot certonly \
+        --webroot \
+        --webroot-path=/var/www/certbot \
+        --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
+        --agree-tos \
+        --no-eff-email \
+        --force-renewal \
+        -d javascript.moe \
+        -d strapi.javascript.moe
+
+    if [ $? -eq 0 ]; then
+        echo "Certificates obtained successfully"
+    else
+        echo "Certbot failed, creating self-signed certificates as fallback..."
+        for domain in javascript.moe strapi.javascript.moe; do
+            create_self_signed "$domain"
+        done
+    fi
+fi
 
 # Reload nginx to use new certificates
 echo "Reloading nginx..."

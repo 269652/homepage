@@ -1,0 +1,6 @@
+[submodule "javascript.moe"]
+	path = javascript.moe
+	url = https://github.com/269652/javascript.moe.git
+[submodule "strapi.javascript.moe"]
+	path = strapi.javascript.moe
+	url = https://github.com/269652/strapi.javascript.moe.git

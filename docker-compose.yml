@@ -1,0 +1,61 @@
+services:
+  strapi:
+    build:
+      context: ./strapi.javascript.moe
+    restart: unless-stopped
+    expose:
+      - "1337"
+    environment:
+      DATABASE_CLIENT: ${DATABASE_CLIENT:-sqlite}
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_FILENAME: ${DATABASE_FILENAME:-./data/database.sqlite}
+      UPLOAD_PATH: ${UPLOAD_PATH:-public/uploads}
+      JWT_SECRET: ${JWT_SECRET:-Ca5KdM7EWrMP5uvYd3+KLQ==}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-Ca5KdM7EWrMP5uvYd3+KLQ==}
+      APP_KEYS: ${APP_KEYS:-toBeModified1,toBeModified2}
+      API_TOKEN_SALT: ${API_TOKEN_SALT:-toBeModified}
+      TRANSFER_TOKEN_SALT: ${TRANSFER_TOKEN_SALT:-toBeModified}
+      DEBUG: ${DEBUG:-strapi:*}
+      STRAPI_LOG_LEVEL: ${STRAPI_LOG_LEVEL:-debug}
+      VERBOSE: "true"
+      URL: ${BACKEND_URL:-https://strapi.javascript.moe}
+      PUBLIC_URL: ${BACKEND_URL:-https://strapi.javascript.moe}
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/public/uploads
+
+  nextjs:
+    build:
+      context: ./javascript.moe
+      args:
+        STRAPI_URL: ${STRAPI_URL:-https://strapi.javascript.moe}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://cgs.javascript.moe}
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      STRAPI_URL: ${STRAPI_URL:-https://strapi.javascript.moe}
+      FRONTEND_DOMAIN: ${FRONTEND_DOMAIN:-javascript.moe}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://javascript.moe}
+    volumes:
+      - ./og-cache:/app/.og-cache
+    depends_on:
+      - strapi
+    platform: linux/amd64
+
+  nginx:
+    build:
+      context: ./nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/sites-available:/etc/nginx/sites-available:ro
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - strapi
+      - nextjs

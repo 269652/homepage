@@ -15,7 +15,8 @@ if [ -f "/etc/letsencrypt/live/javascript.moe/fullchain.pem" ] && \
 else
     echo "SSL certificates not found, creating HTTP-only configs for initial setup..."
 
-    # Create temporary HTTP-only config for javascript.moe
+    # Create temporary HTTP-only config for certbot validation
+    # Only serve ACME challenges - proxy to upstreams only after certs are obtained
     cat > /etc/nginx/sites-enabled/javascript.moe.conf << 'EOF'
 server {
     listen 80;
@@ -23,19 +24,15 @@ server {
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
+        try_files $uri =404;
     }
 
     location / {
-        proxy_pass http://nextjs:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        return 503 "Service temporarily unavailable - obtaining SSL certificate";
     }
 }
 EOF
 
-    # Create temporary HTTP-only config for strapi.javascript.moe
     cat > /etc/nginx/sites-enabled/strapi.javascript.moe.conf << 'EOF'
 server {
     listen 80;
@@ -43,15 +40,11 @@ server {
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
+        try_files $uri =404;
     }
 
     location / {
-        proxy_pass http://strapi:1337;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        client_max_body_size 100M;
+        return 503 "Service temporarily unavailable - obtaining SSL certificate";
     }
 }
 EOF

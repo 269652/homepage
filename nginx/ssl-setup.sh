@@ -1,29 +1,5 @@
 #!/bin/sh
 
-# Wait for nginx to be ready
-echo "Waiting for nginx to be ready..."
-sleep 15
-
-# Verify ACME challenge path is working
-mkdir -p /var/www/certbot/.well-known/acme-challenge
-echo "test" > /var/www/certbot/.well-known/acme-challenge/test-file
-if wget -q -O - http://localhost/.well-known/acme-challenge/test-file 2>/dev/null | grep -q "test"; then
-    echo "ACME challenge path is working correctly"
-else
-    echo "WARNING: ACME challenge path is NOT working - dumping debug info"
-    echo "--- nginx config test ---"
-    nginx -t 2>&1
-    echo "--- sites-enabled contents ---"
-    ls -la /etc/nginx/sites-enabled/
-    echo "--- active server blocks ---"
-    grep -r "server_name\|listen\|location.*well-known" /etc/nginx/sites-enabled/ 2>/dev/null
-    echo "--- trying wget with output ---"
-    wget -O - http://localhost/.well-known/acme-challenge/test-file 2>&1
-    echo "--- checking /var/www/certbot ---"
-    ls -laR /var/www/certbot/
-fi
-rm -f /var/www/certbot/.well-known/acme-challenge/test-file
-
 # Create directories for Let's Encrypt
 mkdir -p /etc/letsencrypt/live/javascript.moe
 mkdir -p /etc/letsencrypt/live/strapi.javascript.moe
@@ -31,7 +7,8 @@ mkdir -p /etc/letsencrypt/live/strapi.javascript.moe
 # Function to check if certificate exists and is valid
 check_cert() {
     domain=$1
-    if [ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]; then
+    if [ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ] && \
+       [ -f "/etc/letsencrypt/live/$domain/privkey.pem" ]; then
         if openssl x509 -checkend 2592000 -noout -in "/etc/letsencrypt/live/$domain/fullchain.pem" >/dev/null 2>&1; then
             echo "Certificate for $domain is still valid"
             return 0
@@ -49,7 +26,6 @@ check_cert() {
 create_self_signed() {
     domain=$1
     echo "Creating self-signed certificate for $domain as fallback..."
-
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout "/etc/letsencrypt/live/$domain/privkey.pem" \
         -out "/etc/letsencrypt/live/$domain/fullchain.pem" \
@@ -66,48 +42,36 @@ for domain in javascript.moe strapi.javascript.moe; do
 done
 
 if [ "$needs_cert" = true ]; then
-    echo "Obtaining certificates for all domains in a single request..."
+    echo "=== Obtaining certificates using standalone mode ==="
+    echo "Certbot will start its own server on port 80..."
 
-    # Try up to 3 times with increasing delay
-    for attempt in 1 2 3; do
-        echo "Certbot attempt $attempt..."
+    certbot certonly \
+        --standalone \
+        --preferred-challenges http \
+        --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
+        --agree-tos \
+        --no-eff-email \
+        --force-renewal \
+        -v \
+        -d javascript.moe \
+        -d strapi.javascript.moe
 
-        certbot certonly \
-            --webroot \
-            --webroot-path=/var/www/certbot \
-            --email ${CERTBOT_EMAIL:-admin@javascript.moe} \
-            --agree-tos \
-            --no-eff-email \
-            --force-renewal \
-            -v \
-            -d javascript.moe \
-            -d strapi.javascript.moe
-
-        if [ $? -eq 0 ]; then
-            echo "Certificates obtained successfully"
-            break
-        else
-            echo "Certbot attempt $attempt failed"
-            if [ "$attempt" -lt 3 ]; then
-                echo "Waiting 30 seconds before retry..."
-                sleep 30
-            else
-                echo "All attempts failed, creating self-signed certificates as fallback..."
-                for domain in javascript.moe strapi.javascript.moe; do
-                    create_self_signed "$domain"
-                done
-            fi
-        fi
-    done
+    if [ $? -eq 0 ]; then
+        echo "Certificates obtained successfully!"
+    else
+        echo "Certbot failed, creating self-signed certificates as fallback..."
+        for domain in javascript.moe strapi.javascript.moe; do
+            create_self_signed "$domain"
+        done
+    fi
 fi
 
-# Reload nginx to use new certificates
-echo "Reloading nginx..."
-nginx -s reload
+# Now set up the SSL nginx configs
+echo "Setting up SSL nginx configurations..."
+rm -f /etc/nginx/sites-enabled/*.conf
+ln -sf /etc/nginx/sites-available/javascript.moe.conf /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/strapi.javascript.moe.conf /etc/nginx/sites-enabled/
 
-# Set up automatic renewal
-echo "Setting up automatic certificate renewal..."
-echo "0 12 * * * /usr/bin/certbot renew --quiet && nginx -s reload" > /etc/cron.d/certbot-renew
-chmod 0644 /etc/cron.d/certbot-renew
-
-echo "SSL setup completed!"
+# Start nginx in foreground
+echo "Starting nginx..."
+exec nginx -g 'daemon off;'

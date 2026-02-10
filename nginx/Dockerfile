@@ -28,5 +28,5 @@ RUN chmod +x /docker-entrypoint.d/01-init-nginx.sh \
 # Expose ports
 EXPOSE 80 443
 
-# Start SSL setup in background, then run nginx in foreground
-CMD ["/bin/sh", "-c", "(/usr/local/bin/ssl-setup.sh && /usr/local/bin/switch-to-ssl.sh) & nginx -g 'daemon off;'"]
+# Run SSL setup (gets certs if needed), then start nginx
+CMD ["/usr/local/bin/ssl-setup.sh"]

@@ -1,15 +1,8 @@
 #!/bin/sh
 
-# Wait for nginx to be ready by checking if port 80 is open
+# Wait for nginx to be ready
 echo "Waiting for nginx to be ready..."
-for i in $(seq 1 30); do
-    if wget -S -O /dev/null http://localhost:80/ 2>&1 | grep -q "HTTP/"; then
-        echo "Nginx is responding on port 80"
-        break
-    fi
-    echo "Attempt $i: Nginx not ready yet, waiting..."
-    sleep 2
-done
+sleep 5
 
 # Verify ACME challenge path is working
 mkdir -p /var/www/certbot/.well-known/acme-challenge

@@ -6,9 +6,13 @@ mkdir -p /etc/nginx/sites-enabled
 # Remove any existing symlinks
 rm -f /etc/nginx/sites-enabled/*.conf
 
-# Check if SSL certificates exist
+# Check if SSL certificates exist and are valid
 if [ -f "/etc/letsencrypt/live/javascript.moe/fullchain.pem" ] && \
-   [ -f "/etc/letsencrypt/live/strapi.javascript.moe/fullchain.pem" ]; then
+   [ -f "/etc/letsencrypt/live/javascript.moe/privkey.pem" ] && \
+   [ -f "/etc/letsencrypt/live/strapi.javascript.moe/fullchain.pem" ] && \
+   [ -f "/etc/letsencrypt/live/strapi.javascript.moe/privkey.pem" ] && \
+   openssl x509 -noout -in "/etc/letsencrypt/live/javascript.moe/fullchain.pem" >/dev/null 2>&1 && \
+   openssl x509 -noout -in "/etc/letsencrypt/live/strapi.javascript.moe/fullchain.pem" >/dev/null 2>&1; then
     echo "SSL certificates found, enabling HTTPS configs..."
     ln -sf /etc/nginx/sites-available/javascript.moe.conf /etc/nginx/sites-enabled/
     ln -sf /etc/nginx/sites-available/strapi.javascript.moe.conf /etc/nginx/sites-enabled/
